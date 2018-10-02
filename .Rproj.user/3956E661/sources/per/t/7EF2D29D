@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1538437780102.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3234666085",
+    "id" : "7EF2D29D",
+    "lastKnownWriteTime" : 1538513802,
+    "last_content_update" : 1538513802552,
+    "path" : "/projects/karsanlab/jgrants/Shiny/GSEAnicer.shiny/app.R",
+    "project_path" : "app.R",
+    "properties" : {
+        "cursorPosition" : "229,5",
+        "scrollLine" : "206"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
