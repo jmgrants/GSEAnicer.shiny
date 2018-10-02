@@ -1,49 +1,235 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
+library(shinyFiles)
+library(tidyverse)
 
-# Define UI for application that draws a histogram
+#####
+
+## replotGSEA script by Thomas Kuilman
+replotGSEA <- function(path, gene.set, class.name, metric.range, title) {
+  
+  if (missing(path)) {
+    stop("Path argument is required")
+  }
+  if (!file.exists(path)) {
+    stop("The path folder could not be found. Please change the path")
+  }
+  if (missing(gene.set)) {
+    stop("Gene set argument is required")
+  }
+  
+  ## Load .rnk data
+  path.rnk <- list.files(path = file.path(path, "edb"),
+                         pattern = ".rnk$", full.names = TRUE)
+  gsea.rnk <- read.delim(file = path.rnk, header = FALSE)
+  colnames(gsea.rnk) <- c("hgnc.symbol", "metric")
+  if (missing(metric.range)) {
+    metric.range <- c(min(gsea.rnk$metric), max(gsea.rnk$metric))
+  }  
+  
+  ## Load .edb data
+  path.edb <- list.files(path = file.path(path, "edb"),
+                         pattern = ".edb$", full.names = TRUE)
+  gsea.edb <- read.delim(file = path.edb,
+                         header = FALSE, stringsAsFactors = FALSE)
+  gsea.edb <- unlist(gsea.edb)
+  gsea.metric <- gsea.edb[grep("METRIC=", gsea.edb)]
+  gsea.metric <- unlist(strsplit(gsea.metric, " "))
+  gsea.metric <- gsea.metric[grep("METRIC=", gsea.metric)]
+  gsea.metric <- gsub("METRIC=", "", gsea.metric)
+  gsea.edb <- gsea.edb[grep("<DTG", gsea.edb)]
+  
+  # Select the right gene set
+  if (length(gsea.edb) == 0) {
+    stop(paste("The gene set name was not found, please provide",
+               "a correct name"))
+  }
+  if (length(grep(paste0(gsub(".\\$(.*$)", "\\1", gene.set), " "), gsea.edb)) > 1) {
+    warning(paste("More than 1 gene set matched the gene.set",
+                  "argument; the first match is plotted"))
+  }
+  gsea.edb <- gsea.edb[grep(paste0(gsub(".\\$(.*$)", "\\1", gene.set), " "), gsea.edb)[1]]
+  
+  # Get template name
+  gsea.edb <- gsub(".*TEMPLATE=(.*)", "\\1", gsea.edb)
+  gsea.edb <- unlist(strsplit(gsea.edb, " "))
+  gsea.template <- gsea.edb[1]
+  
+  # Get gene set name
+  gsea.gene.set <- gsea.edb[2]
+  gsea.gene.set <- gsub("GENESET=gene_sets.gmt#", "", gsea.gene.set)
+  
+  # Get enrichment score
+  gsea.enrichment.score <- gsea.edb[3]
+  gsea.enrichment.score <- gsub("ES=", "", gsea.enrichment.score)
+  
+  # Get gene set name
+  gsea.normalized.enrichment.score <- gsea.edb[4]
+  gsea.normalized.enrichment.score <- gsub("NES=", "",
+                                           gsea.normalized.enrichment.score)
+  
+  # Get nominal p-value
+  gsea.p.value <- gsea.edb[5]
+  gsea.p.value <- gsub("NP=", "", gsea.p.value)
+  gsea.p.value <- as.numeric(gsea.p.value)
+  
+  # Get FDR
+  gsea.fdr <- gsea.edb[6]
+  gsea.fdr <- gsub("FDR=", "", gsea.fdr)
+  gsea.fdr <- as.numeric(gsea.fdr)
+  
+  # Get hit indices
+  gsea.edb <- gsea.edb[grep("HIT_INDICES=", gsea.edb):length(gsea.edb)]
+  gsea.hit.indices <- gsea.edb[seq_len(grep("ES_PROFILE=", gsea.edb) - 1)]
+  gsea.hit.indices <- gsub("HIT_INDICES=", "", gsea.hit.indices)
+  gsea.hit.indices <- as.integer(gsea.hit.indices)
+  
+  # Get ES profile
+  gsea.edb <- gsea.edb[grep("ES_PROFILE=", gsea.edb):length(gsea.edb)]
+  gsea.es.profile <- gsea.edb[seq_len(grep("RANK_AT_ES=", gsea.edb) - 1)]
+  gsea.es.profile <- gsub("ES_PROFILE=", "", gsea.es.profile)
+  gsea.es.profile <- as.numeric(gsea.es.profile)
+  
+  
+  ## Create GSEA plot
+  # Save default for resetting
+  def.par <- par(no.readonly = TRUE)
+  
+  # Create a new device of appropriate size
+  dev.new(width = 1, height = 3)
+  
+  # Create a division of the device
+  gsea.layout <- layout(matrix(c(1, 2, 3, 4)), heights = c(4, 0.3, 0.3, 1.5))
+  layout.show(gsea.layout)
+  
+  # Create plots
+  par(mar = c(0, 5, 2, 2))
+  plot(c(1, gsea.hit.indices, length(gsea.rnk$metric)),
+       c(0, gsea.es.profile, 0), type = "l", col = "red", lwd = 1.5, xaxt = "n",
+       xaxs = "i", xlab = "", ylab = list("ES", cex = 1.6),
+       main = list(title, font = 2, cex = 2.5), ## change font = 1 or 2 for normal or bold title
+       panel.first = {
+         abline(h = seq(round(min(gsea.es.profile), digits = 1),
+                        max(gsea.es.profile), 0.1),
+                col = "gray95", lty = 2)
+         abline(h = 0, col = "gray50", lty = 2)
+       })
+  plot.coordinates <- par("usr")
+  if(gsea.enrichment.score < 0) {
+    text(cex = 2.5, length(gsea.rnk$metric) * 0.01, plot.coordinates[3] * 0.98,
+         paste("NES:", gsea.normalized.enrichment.score, 
+               "\nNominal p-value:", gsea.p.value, 
+               "\nFDR:", gsea.fdr), adj = c(0, 0))
+  } else {
+    text(cex = 2.5, length(gsea.rnk$metric) * 0.99, plot.coordinates[4] - ((plot.coordinates[4] - plot.coordinates[3]) * 0.03),
+         paste("NES:", gsea.normalized.enrichment.score, 
+               "\nNominal p-value:", gsea.p.value, 
+               "\nFDR:", gsea.fdr,
+               "\n"), adj = c(1, 1))
+  }
+  
+  par(mar = c(0, 5, 0, 2))
+  plot(0, type = "n", xaxt = "n", xaxs = "i", xlab = "", yaxt = "n",
+       ylab = "", xlim = c(1, length(gsea.rnk$metric)))
+  abline(v = gsea.hit.indices, lwd = 0.75)
+  
+  par(mar = c(0, 5, 0, 2))
+  rank.colors <- gsea.rnk$metric - metric.range[1]
+  rank.colors <- rank.colors / (metric.range[2] - metric.range[1])
+  rank.colors <- ceiling(rank.colors * 255 + 1)
+  tryCatch({
+    rank.colors <- colorRampPalette(c("blue", "white", "red"))(256)[rank.colors]
+  }, error = function(e) {
+    stop("Please use the metric.range argument to provide a metric range that",
+         "includes all metric values")
+  })
+  # Use rle to prevent too many objects
+  rank.colors <- rle(rank.colors)
+  barplot(matrix(rank.colors$lengths), col = rank.colors$values, border = NA, horiz = TRUE, xaxt = "n", xlim = c(1, length(gsea.rnk$metric)))
+  box()
+  text(cex = 2, length(gsea.rnk$metric) / 2, 0.7,
+       labels = ifelse(!missing(class.name), class.name, gsea.template))
+  text(cex = 2, length(gsea.rnk$metric) * 0.01, 0.7, "Positive", adj = c(0, NA))
+  text(cex = 2, length(gsea.rnk$metric) * 0.99, 0.7, "Negative", adj = c(1, NA))
+  
+  par(mar = c(5, 5, 0, 2))
+  rank.metric <- rle(round(gsea.rnk$metric, digits = 2))
+  plot(gsea.rnk$metric, type = "n", xaxs = "i",
+       xlab = list("Rank in ordered gene list", cex = 1.6), xlim = c(0, length(gsea.rnk$metric)),
+       ylim = metric.range, yaxs = "i",
+       ylab = list("S/N", cex = 1.4),
+       panel.first = abline(h = seq(metric.range[1] / 2,
+                                    metric.range[2] - metric.range[1] / 4,
+                                    metric.range[2] / 2), col = "gray95", lty = 2))
+  
+  barplot(rank.metric$values, col = "lightgrey", lwd = 0.1, xaxs = "i",
+          xlab = list("Rank in ordered gene list", cex = 1.6), xlim = c(0, length(gsea.rnk$metric)),
+          ylim = c(-1, 1), yaxs = "i", width = rank.metric$lengths, border = NA,
+          ylab = list("S/N", cex = 1.4), space = 0, add = TRUE)
+  box()
+  
+  # Reset to default
+  par(def.par)
+  
+}
+
+#####
+
+# USER INTERFACE
 ui <- fluidPage(
-   
-   # Application title
-   titlePanel("Old Faithful Geyser Data"),
-   
-   # Sidebar with a slider input for number of bins 
-   sidebarLayout(
-      sidebarPanel(
-         sliderInput("bins",
-                     "Number of bins:",
-                     min = 1,
-                     max = 50,
-                     value = 30)
-      ),
+  
+  # Application title
+  titlePanel("Make 'nicer' GSEA plots"),
+  
+  # Sidebar with input for data and user options 
+  sidebarLayout(
+    sidebarPanel(
+      print(strong("Select GSEA results folder:")),
       
-      # Show a plot of the generated distribution
-      mainPanel(
-         plotOutput("distPlot")
-      )
-   )
+      shinyDirButton(id = "gsea.dir", label = "GSEA Results Folder"),
+      
+      textInput(inputId = "pathway", label = "Full name of pathway to plot"),
+      
+      textInput(inputId = "title", label = "Title to display on plot"),
+      
+      downloadButton("download.plot", "Download Plot")
+      
+    ),
+    
+    # Main panel output
+    mainPanel(
+      
+      # replotGSEA based on user input
+      print(strong("Preview of GSEA plot")),
+      br(), br(),
+      plotOutput("gsea.plot"),
+      br(), br(), br(), br()
+      
+    )
+  )
 )
 
-# Define server logic required to draw a histogram
-server <- function(input, output) {
-   
-   output$distPlot <- renderPlot({
-      # generate bins based on input$bins from ui.R
-      x    <- faithful[, 2] 
-      bins <- seq(min(x), max(x), length.out = input$bins + 1)
-      
-      # draw the histogram with the specified number of bins
-      hist(x, breaks = bins, col = 'darkgray', border = 'white')
-   })
+# SERVER LOGIC
+server <- function(input, output, session) {
+  
+  # For linking to the user defined directory
+  dir <- reactive({
+    shinyDirChoose(input, id = "gsea.dir")
+    })
+  
+  
+  # For making the plot
+  output$gsea.plot <- replotGSEA(path = dir(), gene.set = input$pathway, title = input$title)
+  
+  # For downloading the plot
+  output$download.plot <- downloadHandler(
+    filename = "GSEA_nicer_plot.png",
+    content = function(file) {
+      ggsave(file, plot = plot.to.save(), device = "png", dpi = 300, width = input$width, height = input$height)
+    }
+  )
+  
 }
+
 
 # Run the application 
 shinyApp(ui = ui, server = server)
