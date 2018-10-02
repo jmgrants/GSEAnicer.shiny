@@ -183,13 +183,12 @@ ui <- fluidPage(
   # Sidebar with input for data and user options 
   sidebarLayout(
     sidebarPanel(
-      print(strong("Select GSEA results folder:")),
       
-      shinyDirButton(id = "gsea.dir", label = "GSEA Results Folder"),
+      shinyDirButton(id = "gsea.dir", label = "GSEA Results Folder", title = "Select GSEA Results Folder"),
       
-      textInput(inputId = "pathway", label = "Full name of pathway to plot"),
+      textInput(inputId = "pathway", label = "Full name of pathway to plot", value = NA),
       
-      textInput(inputId = "title", label = "Title to display on plot"),
+      textInput(inputId = "title", label = "Title to display on plot", value = NA),
       
       downloadButton("download.plot", "Download Plot")
       
@@ -212,15 +211,14 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   
   # For linking to the user defined directory
-  dir <- reactive({
-    shinyDirChoose(input, id = "gsea.dir")
-    })
-  
+  dir <- shinyDirChoose(input, id = "gsea.dir", session=session)
   
   # For making the plot
   output$gsea.plot <- replotGSEA(path = dir(), gene.set = input$pathway, title = input$title)
   
   # For downloading the plot
+  plot.to.save <- replotGSEA(path = dir(), gene.set = input$pathway, title = input$title)
+  
   output$download.plot <- downloadHandler(
     filename = "GSEA_nicer_plot.png",
     content = function(file) {
