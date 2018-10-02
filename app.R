@@ -184,11 +184,11 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       
-      shinyDirButton(id = "gsea.dir", label = "GSEA Results Folder", title = "Select GSEA Results Folder"),
+      textInput(inputId = "dir", label = "Filepath to GSEA results folder", value = ""),
       
-      textInput(inputId = "pathway", label = "Full name of pathway to plot", value = NA),
+      textInput(inputId = "pathway", label = "Full name of GSEA pathway to be plotted", value = NA),
       
-      textInput(inputId = "title", label = "Title to display on plot", value = NA),
+      textInput(inputId = "title", label = "Title to display on plot", value = ""),
       
       downloadButton("download.plot", "Download Plot")
       
@@ -197,11 +197,17 @@ ui <- fluidPage(
     # Main panel output
     mainPanel(
       
+      # Preview the filepath
+      print(strong("Chosen filepath")),
+      br(),
+      textOutput(outputId = "filepath.prev"),
+      br(), br(),
+      
       # replotGSEA based on user input
       print(strong("Preview of GSEA plot")),
       br(), br(),
       plotOutput("gsea.plot"),
-      br(), br(), br(), br()
+      br(), br()
       
     )
   )
@@ -210,23 +216,37 @@ ui <- fluidPage(
 # SERVER LOGIC
 server <- function(input, output, session) {
   
-  # For linking to the user defined directory
-  dir <- shinyDirChoose(input, id = "gsea.dir", session=session)
+  regex.expr <- ".\\."
+  
+  dir.filepath <- reactive({
+    str_replace(string = input$dir, pattern = regex.expr, replacement = "/")
+  })
+  
+  # Preview the filepath
+  output$filepath.prev <- renderText({
+    
+    if(input$dir != "") {
+    print(expr = dir.filepath())
+    }
+    
+    else{
+      print("Select filepath")
+    }
+  })
   
   # For making the plot
-  output$gsea.plot <- replotGSEA(path = dir(), gene.set = input$pathway, title = input$title)
+#  output$gsea.plot <- renderPlot({
+#    replotGSEA(path = dir.filepath(), gene.set = input$pathway, title = input$title)
+#  }) 
   
   # For downloading the plot
-  plot.to.save <- replotGSEA(path = dir(), gene.set = input$pathway, title = input$title)
+#  plot.to.save <- replotGSEA(path = dir(), gene.set = input$pathway, title = input$title)
   
-  output$download.plot <- downloadHandler(
-    filename = "GSEA_nicer_plot.png",
-    content = function(file) {
-      ggsave(file, plot = plot.to.save(), device = "png", dpi = 300, width = input$width, height = input$height)
+#  output$download.plot <- downloadHandler(
+#    filename = "GSEA_nicer_plot.png",
+#    content = function(file) {
+#      ggsave(file, plot = plot.to.save(), device = "png", dpi = 300, width = input$width, height = input$height)
     }
-  )
-  
-}
 
 
 # Run the application 
